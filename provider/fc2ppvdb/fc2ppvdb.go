@@ -77,6 +77,20 @@ func (fc2ppvdb *FC2PPVDB) GetMovieInfoByURL(rawURL string) (info *model.MovieInf
 		info.CoverURL = e.Request.AbsoluteURL(e.Attr("src"))
 	})
 
+	// Cover (fallback: og:image meta tag)
+	c.OnXML(`//meta[@property="og:image"]`, func(e *colly.XMLElement) {
+		if info.CoverURL == "" {
+			info.CoverURL = e.Request.AbsoluteURL(e.Attr("content"))
+		}
+	})
+
+	// Cover (fallback: twitter:image meta tag)
+	c.OnXML(`//meta[@name="twitter:image"]`, func(e *colly.XMLElement) {
+		if info.CoverURL == "" {
+			info.CoverURL = e.Request.AbsoluteURL(e.Attr("content"))
+		}
+	})
+
 	// Title
 	c.OnXML(`//main//div[contains(@class,'container')]/div[1]/div[2]/h2/a`, func(e *colly.XMLElement) {
 		info.Title = e.Text

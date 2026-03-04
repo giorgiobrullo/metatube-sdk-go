@@ -107,7 +107,6 @@ func (m *MovieInfo) IsValid() bool {
 	return m.ID != "" &&
 		m.Number != "" &&
 		m.Title != "" &&
-		m.CoverURL != "" &&
 		m.Provider != "" &&
 		m.Homepage != ""
 }

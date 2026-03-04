@@ -593,7 +593,41 @@ func (fz *FANZA) SearchMovie(keyword string) ([]*model.MovieSearchResult, error)
 		}
 	}
 	// fallback to normal dvd search.
-	return fz.searchMovieNext(strings.Replace(keyword, "-", "", 1))
+	if results, err := fz.searchMovieNext(strings.Replace(keyword, "-", "", 1)); err == nil && len(results) > 0 {
+		return results, nil
+	}
+	// fallback: direct GraphQL lookup by converting keyword to FANZA content ID.
+	return fz.searchMovieByDirectLookup(keyword)
+}
+
+// searchMovieByDirectLookup converts a JAV keyword (e.g. "PRED-797") to a FANZA
+// content ID (e.g. "pred00797") and fetches info via the GraphQL API.
+func (fz *FANZA) searchMovieByDirectLookup(keyword string) ([]*model.MovieSearchResult, error) {
+	// Convert keyword to FANZA content ID format: lowercase, strip hyphen, zero-pad number to 5 digits.
+	id := fz.keywordToContentID(keyword)
+	if id == "" {
+		return nil, provider.ErrInfoNotFound
+	}
+	info, err := fz.GetMovieInfoByID(id)
+	if err != nil {
+		return nil, err
+	}
+	if !info.IsValid() {
+		return nil, provider.ErrInfoNotFound
+	}
+	return []*model.MovieSearchResult{info.ToSearchResult()}, nil
+}
+
+// keywordToContentID converts a JAV number like "PRED-797" to FANZA content ID "pred00797".
+func (fz *FANZA) keywordToContentID(keyword string) string {
+	re := regexp.MustCompile(`(?i)^([A-Z]+)-?(\d+)$`)
+	m := re.FindStringSubmatch(keyword)
+	if len(m) != 3 {
+		return ""
+	}
+	prefix := strings.ToLower(m[1])
+	num, _ := strconv.Atoi(m[2])
+	return fmt.Sprintf("%s%05d", prefix, num)
 }
 
 func (fz *FANZA) searchMovieNext(keyword string) (results []*model.MovieSearchResult, err error) {

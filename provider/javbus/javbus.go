@@ -54,8 +54,8 @@ func New() *JavBus {
 				"Referer": baseURL,
 			}),
 			scraper.WithCookies(baseURL, []*http.Cookie{
-				// existmag=all
 				{Name: "existmag", Value: "all"},
+				{Name: "over18", Value: "1"},
 			})),
 	}
 }
