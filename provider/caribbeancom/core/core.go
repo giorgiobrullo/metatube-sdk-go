@@ -18,6 +18,7 @@ import (
 
 	"github.com/metatube-community/metatube-sdk-go/common/parser"
 	"github.com/metatube-community/metatube-sdk-go/model"
+	"github.com/metatube-community/metatube-sdk-go/provider"
 	"github.com/metatube-community/metatube-sdk-go/provider/internal/scraper"
 )
 
@@ -101,7 +102,9 @@ func (core *Core) GetMovieReviewsByID(id string) (reviews []*model.MovieReviewDe
 		parseReviews(e)
 	})
 
-	err = c.Visit(fmt.Sprintf(core.MovieURL, id))
+	if vErr := c.Visit(fmt.Sprintf(core.MovieURL, id)); vErr != nil {
+		err = vErr
+	}
 	return
 }
 
@@ -123,6 +126,8 @@ func (core *Core) GetMovieInfoByURL(rawURL string) (info *model.MovieInfo, err e
 	}
 
 	c := core.ClonedCollector()
+
+	scraper.SetupHTTPErrorHandling(c, &err)
 
 	// Title
 	c.OnXML(`//h1[@itemprop="name"]`, func(e *colly.XMLElement) {
@@ -213,6 +218,10 @@ func (core *Core) GetMovieInfoByURL(rawURL string) (info *model.MovieInfo, err e
 	})
 
 	c.OnScraped(func(_ *colly.Response) {
+		if err == nil && info.Title == "" {
+			err = provider.ErrInfoNotFound
+			return
+		}
 		// Fallback to parse ID datetime.
 		if time.Time(info.ReleaseDate).IsZero() {
 			if ss := regexp.MustCompile(`(\d{6})[-_]\d+`).
@@ -223,6 +232,8 @@ func (core *Core) GetMovieInfoByURL(rawURL string) (info *model.MovieInfo, err e
 		}
 	})
 
-	err = c.Visit(info.Homepage)
+	if vErr := c.Visit(info.Homepage); vErr != nil {
+		err = vErr
+	}
 	return
 }

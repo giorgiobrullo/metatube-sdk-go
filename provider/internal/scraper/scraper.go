@@ -1,6 +1,7 @@
 package scraper
 
 import (
+	"fmt"
 	"net/url"
 	"time"
 
@@ -83,3 +84,21 @@ func (s *Scraper) SetProxy(proxyURL string) error { return s.c.SetProxy(proxyURL
 
 // SetRequestTimeout sets timeout for HTTP requests.
 func (s *Scraper) SetRequestTimeout(timeout time.Duration) { s.c.SetRequestTimeout(timeout) }
+
+// SetupHTTPErrorHandling configures the collector to treat non-2xx responses as errors.
+func SetupHTTPErrorHandling(c *colly.Collector, errPtr *error) {
+	c.OnResponse(func(r *colly.Response) {
+		if r.StatusCode >= 400 {
+			*errPtr = fmt.Errorf("HTTP %d from %s", r.StatusCode, r.Request.URL)
+		}
+	})
+}
+
+// SetupResultValidation configures the collector to check that info was populated after scraping.
+func SetupResultValidation(c *colly.Collector, titlePtr *string, errPtr *error) {
+	c.OnScraped(func(_ *colly.Response) {
+		if *errPtr == nil && *titlePtr == "" {
+			*errPtr = provider.ErrInfoNotFound
+		}
+	})
+}

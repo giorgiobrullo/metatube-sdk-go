@@ -84,7 +84,9 @@ func (mgs *MGS) GetMovieReviewsByID(id string) (reviews []*model.MovieReviewDeta
 		})
 	})
 
-	err = c.Visit(fmt.Sprintf(movieURL, id))
+	if vErr := c.Visit(fmt.Sprintf(movieURL, id)); vErr != nil {
+		err = vErr
+	}
 	return
 }
 
@@ -128,6 +130,9 @@ func (mgs *MGS) GetMovieInfoByURL(rawURL string) (info *model.MovieInfo, err err
 	}
 
 	c := mgs.ClonedCollector()
+
+	scraper.SetupHTTPErrorHandling(c, &err)
+	scraper.SetupResultValidation(c, &info.Title, &err)
 
 	// Title
 	c.OnXML(`//*[@id="center_column"]/div[1]/h1`, func(e *colly.XMLElement) {
@@ -200,7 +205,9 @@ func (mgs *MGS) GetMovieInfoByURL(rawURL string) (info *model.MovieInfo, err err
 		}
 	})
 
-	err = c.Visit(info.Homepage)
+	if vErr := c.Visit(info.Homepage); vErr != nil {
+		err = vErr
+	}
 	return
 }
 
@@ -213,6 +220,8 @@ func (mgs *MGS) NormalizeMovieKeyword(keyword string) string {
 
 func (mgs *MGS) SearchMovie(keyword string) (results []*model.MovieSearchResult, err error) {
 	c := mgs.ClonedCollector()
+
+	scraper.SetupHTTPErrorHandling(c, &err)
 
 	c.OnXML(`//*[@id="center_column"]//ul[@class="product_list"]/li`, func(e *colly.XMLElement) {
 		homepage := e.Request.AbsoluteURL(e.ChildAttr(`.//h5/a`, "href"))
@@ -233,7 +242,9 @@ func (mgs *MGS) SearchMovie(keyword string) (results []*model.MovieSearchResult,
 		})
 	})
 
-	err = c.Visit(fmt.Sprintf(searchURL, url.QueryEscape(keyword)))
+	if vErr := c.Visit(fmt.Sprintf(searchURL, url.QueryEscape(keyword))); vErr != nil {
+		err = vErr
+	}
 	return
 }
 

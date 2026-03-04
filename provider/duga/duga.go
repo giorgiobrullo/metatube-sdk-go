@@ -78,6 +78,8 @@ func (duga *DUGA) GetMovieInfoByURL(rawURL string) (info *model.MovieInfo, err e
 
 	c := duga.ClonedCollector()
 
+	scraper.SetupHTTPErrorHandling(c, &err)
+
 	// Title
 	c.OnXML(`//*[@id="contentsname"]`, func(e *colly.XMLElement) {
 		info.Title = e.Text
@@ -196,6 +198,10 @@ func (duga *DUGA) GetMovieInfoByURL(rawURL string) (info *model.MovieInfo, err e
 
 	// Multiple (fallback)
 	c.OnScraped(func(_ *colly.Response) {
+		if err == nil && info.Title == "" {
+			err = provider.ErrInfoNotFound
+			return
+		}
 		if info.CoverURL == "" {
 			// use thumb as cover.
 			info.CoverURL = info.ThumbURL
@@ -210,7 +216,9 @@ func (duga *DUGA) GetMovieInfoByURL(rawURL string) (info *model.MovieInfo, err e
 		}
 	})
 
-	err = c.Visit(info.Homepage)
+	if vErr := c.Visit(info.Homepage); vErr != nil {
+		err = vErr
+	}
 	return
 }
 
@@ -223,6 +231,8 @@ func (duga *DUGA) NormalizeMovieKeyword(keyword string) string {
 
 func (duga *DUGA) SearchMovie(keyword string) (results []*model.MovieSearchResult, err error) {
 	c := duga.ClonedCollector()
+
+	scraper.SetupHTTPErrorHandling(c, &err)
 
 	var ids []string
 	c.OnXML(`//*[@id="searchresultarea"]//div[@class="contentslist"]`, func(e *colly.XMLElement) {
@@ -250,7 +260,9 @@ func (duga *DUGA) SearchMovie(keyword string) (results []*model.MovieSearchResul
 		wg.Wait()
 	})
 
-	err = c.Visit(fmt.Sprintf(searchURL, keyword))
+	if vErr := c.Visit(fmt.Sprintf(searchURL, keyword)); vErr != nil {
+		err = vErr
+	}
 	return
 }
 

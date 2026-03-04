@@ -73,6 +73,8 @@ func (fc2 *FC2) GetMovieInfoByURL(rawURL string) (info *model.MovieInfo, err err
 
 	c := fc2.ClonedCollector()
 
+	scraper.SetupHTTPErrorHandling(c, &err)
+
 	// Headers
 	c.OnXML(`//div[@class="items_article_headerInfo"]`, func(e *colly.XMLElement) {
 		// Modified title extraction
@@ -157,6 +159,10 @@ func (fc2 *FC2) GetMovieInfoByURL(rawURL string) (info *model.MovieInfo, err err
 
 	// Cover (fallbacks)
 	c.OnScraped(func(_ *colly.Response) {
+		if err == nil && info.Title == "" {
+			err = provider.ErrInfoNotFound
+			return
+		}
 		if info.ThumbURL != "" {
 			info.CoverURL = info.ThumbURL
 		} else if len(info.PreviewImages) > 0 {

@@ -75,6 +75,9 @@ func (core *Core) GetMovieInfoByURL(rawURL string) (info *model.MovieInfo, err e
 
 	c := core.ClonedCollector()
 
+	scraper.SetupHTTPErrorHandling(c, &err)
+	scraper.SetupResultValidation(c, &info.Title, &err)
+
 	// Title
 	c.OnXML(`//div[@class="bar02_works"]/h1/text()`, func(e *colly.XMLElement) {
 		info.Title = strings.TrimSpace(e.Text)
@@ -137,7 +140,9 @@ func (core *Core) GetMovieInfoByURL(rawURL string) (info *model.MovieInfo, err e
 		}
 	})
 
-	err = c.Visit(info.Homepage)
+	if vErr := c.Visit(info.Homepage); vErr != nil {
+		err = vErr
+	}
 	return
 }
 
@@ -147,6 +152,9 @@ func (core *Core) NormalizeMovieKeyword(keyword string) string {
 
 func (core *Core) SearchMovie(keyword string) (results []*model.MovieSearchResult, err error) {
 	c := core.ClonedCollector()
+
+	scraper.SetupHTTPErrorHandling(c, &err)
+
 	c.ParseHTTPErrorResponse = true
 	c.SetRedirectHandler(func(req *http.Request, via []*http.Request) error {
 		return http.ErrUseLastResponse
@@ -170,6 +178,8 @@ func (core *Core) SearchMovie(keyword string) (results []*model.MovieSearchResul
 		})
 	})
 
-	err = c.Visit(fmt.Sprintf(core.SearchURL, url.QueryEscape(keyword)))
+	if vErr := c.Visit(fmt.Sprintf(core.SearchURL, url.QueryEscape(keyword))); vErr != nil {
+		err = vErr
+	}
 	return
 }

@@ -75,6 +75,8 @@ func (mdq *MadouQu) GetMovieInfoByURL(rawURL string) (info *model.MovieInfo, err
 
 	c := mdq.ClonedCollector()
 
+	scraper.SetupHTTPErrorHandling(c, &err)
+
 	c.OnXML(`//article[starts-with(@id,'post')]//div[@class="container"]//p`, func(e *colly.XMLElement) {
 		if src := e.ChildAttr(`./img`, "src"); src != "" {
 			info.CoverURL = ExtractImgSrc(src)
@@ -112,6 +114,10 @@ func (mdq *MadouQu) GetMovieInfoByURL(rawURL string) (info *model.MovieInfo, err
 
 	// Fallback
 	c.OnScraped(func(_ *colly.Response) {
+		if err == nil && info.Title == "" && info.Number == "" {
+			err = provider.ErrInfoNotFound
+			return
+		}
 		// Number = Upper ID
 		if info.Number == "" {
 			info.Number = parser.ParseIDToNumber(info.ID)
@@ -141,6 +147,8 @@ func (mdq *MadouQu) NormalizeMovieKeyword(keyword string) string {
 
 func (mdq *MadouQu) SearchMovie(keyword string) (results []*model.MovieSearchResult, err error) {
 	c := mdq.ClonedCollector()
+
+	scraper.SetupHTTPErrorHandling(c, &err)
 
 	c.OnXML(`//article[starts-with(@id, 'post')]`, func(e *colly.XMLElement) {
 		link := e.ChildAttr(`.//h2/a`, "href")

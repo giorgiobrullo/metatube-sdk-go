@@ -81,6 +81,8 @@ func (pcl *Pcolle) GetMovieInfoByURL(rawURL string) (info *model.MovieInfo, err 
 
 	c := pcl.ClonedCollector()
 
+	scraper.SetupHTTPErrorHandling(c, &err)
+
 	// Fields
 	c.OnXML(`//table//tr`, func(e *colly.XMLElement) {
 		switch e.ChildText(`.//th`) {
@@ -139,13 +141,19 @@ func (pcl *Pcolle) GetMovieInfoByURL(rawURL string) (info *model.MovieInfo, err 
 
 	// fallbacks
 	c.OnScraped(func(_ *colly.Response) {
+		if err == nil && info.Title == "" {
+			err = provider.ErrInfoNotFound
+			return
+		}
 		if info.CoverURL == "" && len(info.PreviewImages) > 0 {
 			// cover fallback.
 			info.CoverURL = info.PreviewImages[0]
 		}
 	})
 
-	err = c.Visit(info.Homepage)
+	if vErr := c.Visit(info.Homepage); vErr != nil {
+		err = vErr
+	}
 	return
 }
 

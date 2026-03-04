@@ -82,6 +82,8 @@ func (javfree *JAVFREE) GetMovieInfoByURL(rawURL string) (info *model.MovieInfo,
 
 	c := javfree.ClonedCollector()
 
+	scraper.SetupHTTPErrorHandling(c, &err)
+
 	// Title
 	c.OnXML(`//header[@class="entry-header"]/h1`, func(e *colly.XMLElement) {
 		info.Title = strings.TrimSpace(regexp.
@@ -110,6 +112,10 @@ func (javfree *JAVFREE) GetMovieInfoByURL(rawURL string) (info *model.MovieInfo,
 
 	// Cover (fallback)
 	c.OnScraped(func(_ *colly.Response) {
+		if err == nil && info.Title == "" && info.Number == "" {
+			err = provider.ErrInfoNotFound
+			return
+		}
 		if info.CoverURL == "" && len(info.PreviewImages) > 0 {
 			info.CoverURL = info.PreviewImages[0]
 			info.PreviewImages = info.PreviewImages[1:]
@@ -118,7 +124,9 @@ func (javfree *JAVFREE) GetMovieInfoByURL(rawURL string) (info *model.MovieInfo,
 		info.ThumbURL = info.CoverURL
 	})
 
-	err = c.Visit(info.Homepage)
+	if vErr := c.Visit(info.Homepage); vErr != nil {
+		err = vErr
+	}
 	return
 }
 
@@ -128,6 +136,9 @@ func (javfree *JAVFREE) NormalizeMovieKeyword(keyword string) string {
 
 func (javfree *JAVFREE) SearchMovie(keyword string) (results []*model.MovieSearchResult, err error) {
 	c := javfree.ClonedCollector()
+
+	scraper.SetupHTTPErrorHandling(c, &err)
+
 	fc2ID := keyword[strings.LastIndex(keyword, "-")+1:]
 	c.OnXML(`//article[@class="hentry clear"]`, func(e *colly.XMLElement) {
 		var thumb, cover string
@@ -147,7 +158,9 @@ func (javfree *JAVFREE) SearchMovie(keyword string) (results []*model.MovieSearc
 			CoverURL: cover,
 		})
 	})
-	err = c.Visit(fmt.Sprintf(searchURL, url.QueryEscape(fc2ID)))
+	if vErr := c.Visit(fmt.Sprintf(searchURL, url.QueryEscape(fc2ID))); vErr != nil {
+		err = vErr
+	}
 	return
 }
 

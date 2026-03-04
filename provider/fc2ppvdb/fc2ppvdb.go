@@ -72,6 +72,9 @@ func (fc2ppvdb *FC2PPVDB) GetMovieInfoByURL(rawURL string) (info *model.MovieInf
 
 	c := fc2ppvdb.ClonedCollector()
 
+	scraper.SetupHTTPErrorHandling(c, &err)
+	scraper.SetupResultValidation(c, &info.Title, &err)
+
 	// Cover/Thumb Image
 	c.OnXML(`//main//div[contains(@class,'container')]/div[1]/div[1]/a/img`, func(e *colly.XMLElement) {
 		info.CoverURL = e.Request.AbsoluteURL(e.Attr("src"))
@@ -123,7 +126,9 @@ func (fc2ppvdb *FC2PPVDB) GetMovieInfoByURL(rawURL string) (info *model.MovieInf
 		}
 	})
 
-	err = c.Visit(info.Homepage)
+	if vErr := c.Visit(info.Homepage); vErr != nil {
+		err = vErr
+	}
 	return
 }
 

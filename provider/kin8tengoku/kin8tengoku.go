@@ -80,6 +80,9 @@ func (k8 *KIN8) GetMovieInfoByURL(rawURL string) (info *model.MovieInfo, err err
 
 	c := k8.ClonedCollector()
 
+	scraper.SetupHTTPErrorHandling(c, &err)
+	scraper.SetupResultValidation(c, &info.Title, &err)
+
 	// Title
 	c.OnXML(`//*[@id="sub_main"]/p[@class="sub_title" or @class="sub_title_vip"]`, func(e *colly.XMLElement) {
 		info.Title = strings.TrimSpace(e.Text)
@@ -216,7 +219,9 @@ func (k8 *KIN8) GetMovieInfoByURL(rawURL string) (info *model.MovieInfo, err err
 		d.Visit(fmt.Sprintf(reviewURL, q.Encode()))
 	})
 
-	err = c.Visit(info.Homepage)
+	if vErr := c.Visit(info.Homepage); vErr != nil {
+		err = vErr
+	}
 	return
 }
 

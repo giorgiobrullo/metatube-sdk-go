@@ -75,6 +75,8 @@ func (gcu *Getchu) GetMovieInfoByURL(rawURL string) (info *model.MovieInfo, err 
 
 	c := gcu.ClonedCollector()
 
+	scraper.SetupHTTPErrorHandling(c, &err)
+
 	// Misc
 	c.OnXML(`//td`, func(e *colly.XMLElement) {
 		switch {
@@ -128,12 +130,18 @@ func (gcu *Getchu) GetMovieInfoByURL(rawURL string) (info *model.MovieInfo, err 
 
 	// Fallbacks
 	c.OnScraped(func(_ *colly.Response) {
+		if err == nil && info.Title == "" {
+			err = provider.ErrInfoNotFound
+			return
+		}
 		if info.ThumbURL == "" {
 			info.ThumbURL = info.CoverURL // same as cover.
 		}
 	})
 
-	err = c.Visit(info.Homepage)
+	if vErr := c.Visit(info.Homepage); vErr != nil {
+		err = vErr
+	}
 	return
 }
 

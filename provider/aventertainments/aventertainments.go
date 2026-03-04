@@ -31,7 +31,7 @@ const (
 const (
 	baseURL   = "https://www.aventertainments.com/"
 	movieURL  = "https://www.aventertainments.com/%s/2/29/product_lists"
-	searchURL = "https://www.aventertainments.com/search_Products.aspx?languageID=2&dept_id=29&keyword=%s&searchby=keyword"
+	searchURL = "https://www.aventertainments.com/ppv/search?keyword=%s&lang=2&v=1&culture=ja-JP"
 )
 
 type AVE struct {
@@ -51,11 +51,15 @@ func (ave *AVE) ParseMovieIDFromURL(rawURL string) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	// old url format.
+	// current url format: /ppv/detail?pro=ID or /dvd/detail?pro=ID
+	if proID := homepage.Query().Get("pro"); proID != "" {
+		return proID, nil
+	}
+	// legacy url format: /product_show.aspx?product_id=ID
 	if productID := homepage.Query().Get("product_id"); productID != "" {
 		return productID, nil
 	}
-	// new url format.
+	// legacy url format: /ID/2/29/product_lists
 	if ss := regexp.MustCompile(`^/(\d+)/\d+/\d+`).FindStringSubmatch(homepage.Path); len(ss) == 2 {
 		return ss[1], nil
 	}
@@ -78,6 +82,9 @@ func (ave *AVE) GetMovieInfoByURL(rawURL string) (info *model.MovieInfo, err err
 	}
 
 	c := ave.ClonedCollector()
+
+	scraper.SetupHTTPErrorHandling(c, &err)
+	scraper.SetupResultValidation(c, &info.Title, &err)
 
 	// Title
 	c.OnXML(`//*[@id="MyBody"]//div[@class="section-title"]/h3`, func(e *colly.XMLElement) {
@@ -157,7 +164,9 @@ func (ave *AVE) GetMovieInfoByURL(rawURL string) (info *model.MovieInfo, err err
 		}
 	})
 
-	err = c.Visit(info.Homepage)
+	if vErr := c.Visit(info.Homepage); vErr != nil {
+		err = vErr
+	}
 	return
 }
 
@@ -171,22 +180,32 @@ func (ave *AVE) NormalizeMovieKeyword(keyword string) string {
 func (ave *AVE) SearchMovie(keyword string) (results []*model.MovieSearchResult, err error) {
 	c := ave.ClonedCollector()
 
+	scraper.SetupHTTPErrorHandling(c, &err)
+
 	c.OnXML(`//div[@class="single-slider-product grid-view-product"]`, func(e *colly.XMLElement) {
 		href := e.ChildAttr(`.//div[1]/a`, "href")
 		thumb := e.ChildAttr(`.//div[1]/a/img`, "src")
 		id, _ := ave.ParseMovieIDFromURL(e.Request.AbsoluteURL(href))
+		thumbURL := e.Request.AbsoluteURL(thumb)
+		coverURL := thumbURL
+		// Legacy URL format had separate jacket_images/bigcover paths.
+		if strings.Contains(thumbURL, "jacket_images") {
+			coverURL = strings.ReplaceAll(thumbURL, "jacket_images", "bigcover")
+		}
 		results = append(results, &model.MovieSearchResult{
 			ID:       id,
 			Number:   parserNumber(thumb),
 			Title:    e.ChildText(`.//div[2]/p[@class="product-title"]/a`),
 			Provider: ave.Name(),
 			Homepage: e.Request.AbsoluteURL(href),
-			ThumbURL: e.Request.AbsoluteURL(thumb),
-			CoverURL: e.Request.AbsoluteURL(strings.ReplaceAll(thumb, "jacket_images", "bigcover")),
+			ThumbURL: thumbURL,
+			CoverURL: coverURL,
 		})
 	})
 
-	err = c.Visit(fmt.Sprintf(searchURL, url.QueryEscape(keyword)))
+	if vErr := c.Visit(fmt.Sprintf(searchURL, url.QueryEscape(keyword))); vErr != nil {
+		err = vErr
+	}
 	return
 }
 

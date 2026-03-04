@@ -88,6 +88,9 @@ func (sod *SOD) GetMovieInfoByURL(rawURL string) (info *model.MovieInfo, err err
 	c := sod.ClonedCollector()
 	composedMovieURL := fmt.Sprintf(movieURL, url.QueryEscape(info.ID))
 
+	scraper.SetupHTTPErrorHandling(c, &err)
+	scraper.SetupResultValidation(c, &info.Title, &err)
+
 	// Age check
 	c.OnHTML(`#modal > div.pkg_age > div.enter > a`, func(e *colly.HTMLElement) {
 		d := c.Clone()
@@ -168,7 +171,9 @@ func (sod *SOD) GetMovieInfoByURL(rawURL string) (info *model.MovieInfo, err err
 		}
 	}()
 
-	err = c.Visit(composedMovieURL)
+	if vErr := c.Visit(composedMovieURL); vErr != nil {
+		err = vErr
+	}
 	return
 }
 
@@ -182,6 +187,8 @@ func (sod *SOD) NormalizeMovieKeyword(keyword string) string {
 func (sod *SOD) SearchMovie(keyword string) (results []*model.MovieSearchResult, err error) {
 	c := sod.ClonedCollector()
 	composedSearchURL := fmt.Sprintf(searchURL, url.QueryEscape(keyword))
+
+	scraper.SetupHTTPErrorHandling(c, &err)
 
 	// Age check
 	c.OnHTML(`#modal > div.pkg_age > div.enter > a`, func(e *colly.HTMLElement) {
@@ -214,7 +221,9 @@ func (sod *SOD) SearchMovie(keyword string) (results []*model.MovieSearchResult,
 		})
 	})
 
-	err = c.Visit(composedSearchURL)
+	if vErr := c.Visit(composedSearchURL); vErr != nil {
+		err = vErr
+	}
 	return
 }
 
