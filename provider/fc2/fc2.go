@@ -49,9 +49,25 @@ func (fc2 *FC2) SetConfig(config provider.Config) error {
 		if err != nil {
 			return err
 		}
-		return fc2.SetCookies(baseURL, []*http.Cookie{
+		cookies := []*http.Cookie{
 			{Name: "CONTENTS_FC2_PHPSESSID", Value: sessionID},
-		})
+		}
+		if config.Has("cf_clearance") {
+			v, _ := config.GetString("cf_clearance")
+			if v != "" {
+				cookies = append(cookies, &http.Cookie{Name: "cf_clearance", Value: v})
+			}
+		}
+		if err := fc2.SetCookies(baseURL, cookies); err != nil {
+			return err
+		}
+		// Cloudflare validates that the User-Agent matches the cf_clearance cookie.
+		if config.Has("user_agent") {
+			v, _ := config.GetString("user_agent")
+			if v != "" {
+				fc2.SetUserAgent(v)
+			}
+		}
 	}
 	return nil
 }

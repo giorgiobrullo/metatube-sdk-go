@@ -91,6 +91,11 @@ func (s *Scraper) SetCookies(rawURL string, cookies []*http.Cookie) error {
 	return s.c.SetCookies(rawURL, cookies)
 }
 
+// SetUserAgent overrides the scraper's User-Agent header.
+func (s *Scraper) SetUserAgent(ua string) {
+	s.c.UserAgent = ua
+}
+
 // SetupHTTPErrorHandling configures the collector to treat non-2xx responses as errors.
 func SetupHTTPErrorHandling(c *colly.Collector, errPtr *error) {
 	c.OnResponse(func(r *colly.Response) {
