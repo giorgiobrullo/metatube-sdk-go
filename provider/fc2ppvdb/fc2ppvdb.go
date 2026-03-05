@@ -114,13 +114,28 @@ func (fc2ppvdb *FC2PPVDB) GetMovieInfoByURL(rawURL string) (info *model.MovieInf
 		Genres:        []string{},
 	}
 
-	c := fc2ppvdb.ClonedCollector()
+	// Step 1: Visit the article HTML page to establish session state.
+	// The API only returns data for articles whose page was visited in the current session.
+	pageCollector := fc2ppvdb.ClonedCollector()
+	scraper.SetupHTTPErrorHandling(pageCollector, &err)
+	if vErr := pageCollector.Visit(rawURL); vErr != nil {
+		err = vErr
+		return
+	}
+	if err != nil {
+		return
+	}
 
-	scraper.SetupHTTPErrorHandling(c, &err)
+	// Step 2: Call the JSON API endpoint (same session/cookies).
+	apiCollector := fc2ppvdb.ClonedCollector()
+	scraper.SetupHTTPErrorHandling(apiCollector, &err)
 
-	// Parse JSON API response
-	c.OnResponse(func(r *colly.Response) {
+	apiCollector.OnResponse(func(r *colly.Response) {
 		if err != nil {
+			return
+		}
+		if len(r.Body) == 0 {
+			err = provider.ErrInfoNotFound
 			return
 		}
 
@@ -175,7 +190,7 @@ func (fc2ppvdb *FC2PPVDB) GetMovieInfoByURL(rawURL string) (info *model.MovieInf
 	})
 
 	apiURL := fmt.Sprintf(articleAPIURL, id)
-	if vErr := c.Visit(apiURL); vErr != nil {
+	if vErr := apiCollector.Visit(apiURL); vErr != nil {
 		err = vErr
 	}
 	return
