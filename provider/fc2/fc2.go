@@ -44,29 +44,45 @@ func New() *FC2 {
 }
 
 func (fc2 *FC2) SetConfig(config provider.Config) error {
-	if config.Has("session_id") {
-		sessionID, err := config.GetString("session_id")
-		if err != nil {
-			return err
-		}
-		cookies := []*http.Cookie{
-			{Name: "CONTENTS_FC2_PHPSESSID", Value: sessionID},
-		}
-		if config.Has("cf_clearance") {
-			v, _ := config.GetString("cf_clearance")
+	if !config.Has("session_id") {
+		return nil
+	}
+	sessionID, err := config.GetString("session_id")
+	if err != nil {
+		return err
+	}
+
+	// PHPSESSID is the content session cookie (on .contents.fc2.com)
+	contentsCookies := []*http.Cookie{
+		{Name: "CONTENTS_FC2_PHPSESSID", Value: sessionID},
+	}
+
+	// Cookies on .fc2.com (Cloudflare clearance + FC2 auth)
+	var fc2Cookies []*http.Cookie
+	for _, key := range []string{"cf_clearance", "fcu", "fcus", "FC2_GDPR", "contents_mode", "contents_func_mode"} {
+		if config.Has(key) {
+			v, _ := config.GetString(key)
 			if v != "" {
-				cookies = append(cookies, &http.Cookie{Name: "cf_clearance", Value: v})
+				fc2Cookies = append(fc2Cookies, &http.Cookie{Name: key, Value: v})
 			}
 		}
-		if err := fc2.SetCookies(baseURL, cookies); err != nil {
+	}
+
+	if err := fc2.SetCookies(baseURL, contentsCookies); err != nil {
+		return err
+	}
+	if len(fc2Cookies) > 0 {
+		// Set cookies on the parent domain too for Cloudflare + auth
+		if err := fc2.SetCookies("https://fc2.com/", fc2Cookies); err != nil {
 			return err
 		}
-		// Cloudflare validates that the User-Agent matches the cf_clearance cookie.
-		if config.Has("user_agent") {
-			v, _ := config.GetString("user_agent")
-			if v != "" {
-				fc2.SetUserAgent(v)
-			}
+	}
+
+	// Cloudflare validates that the User-Agent matches the cf_clearance cookie.
+	if config.Has("user_agent") {
+		v, _ := config.GetString("user_agent")
+		if v != "" {
+			fc2.SetUserAgent(v)
 		}
 	}
 	return nil
