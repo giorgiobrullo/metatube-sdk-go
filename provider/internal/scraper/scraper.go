@@ -2,6 +2,7 @@ package scraper
 
 import (
 	"fmt"
+	"net/http"
 	"net/url"
 	"time"
 
@@ -84,6 +85,11 @@ func (s *Scraper) SetProxy(proxyURL string) error { return s.c.SetProxy(proxyURL
 
 // SetRequestTimeout sets timeout for HTTP requests.
 func (s *Scraper) SetRequestTimeout(timeout time.Duration) { s.c.SetRequestTimeout(timeout) }
+
+// SetCookies sets cookies on the scraper's collector for the given URL.
+func (s *Scraper) SetCookies(rawURL string, cookies []*http.Cookie) error {
+	return s.c.SetCookies(rawURL, cookies)
+}
 
 // SetupHTTPErrorHandling configures the collector to treat non-2xx responses as errors.
 func SetupHTTPErrorHandling(c *colly.Collector, errPtr *error) {

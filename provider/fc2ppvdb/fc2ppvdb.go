@@ -1,14 +1,14 @@
 package fc2ppvdb
 
 import (
+	"encoding/json"
 	"fmt"
+	"net/http"
 	"net/url"
 	"path"
 	"strings"
 
-	"github.com/antchfx/htmlquery"
 	"github.com/gocolly/colly/v2"
-	"golang.org/x/net/html"
 	"golang.org/x/text/language"
 
 	"github.com/metatube-community/metatube-sdk-go/common/parser"
@@ -18,7 +18,10 @@ import (
 	"github.com/metatube-community/metatube-sdk-go/provider/internal/scraper"
 )
 
-var _ provider.MovieProvider = (*FC2PPVDB)(nil)
+var (
+	_ provider.MovieProvider = (*FC2PPVDB)(nil)
+	_ provider.ConfigSetter  = (*FC2PPVDB)(nil)
+)
 
 const (
 	Name     = "FC2PPVDB"
@@ -26,9 +29,32 @@ const (
 )
 
 const (
-	baseURL  = "https://fc2ppvdb.com/"
-	movieURL = "https://fc2ppvdb.com/articles/%s"
+	baseURL       = "https://fc2ppvdb.com/"
+	movieURL      = "https://fc2ppvdb.com/articles/%s"
+	articleAPIURL = "https://fc2ppvdb.com/articles/article-info?videoid=%s"
 )
+
+// articleResponse is the JSON response from the FC2PPVDB article API.
+type articleResponse struct {
+	IsLoggedIn int `json:"isLoggedIn"`
+	Article    *struct {
+		ID          int    `json:"id"`
+		Title       string `json:"title"`
+		VideoID     int    `json:"video_id"`
+		ReleaseDate string `json:"release_date"`
+		Duration    string `json:"duration"`
+		ImageURL    string `json:"image_url"`
+		Writer      *struct {
+			Name string `json:"name"`
+		} `json:"writer"`
+		Actresses []struct {
+			Name string `json:"name"`
+		} `json:"actresses"`
+		Tags []struct {
+			Name string `json:"name"`
+		} `json:"tags"`
+	} `json:"article"`
+}
 
 type FC2PPVDB struct {
 	*scraper.Scraper
@@ -36,6 +62,24 @@ type FC2PPVDB struct {
 
 func New() *FC2PPVDB {
 	return &FC2PPVDB{scraper.NewDefaultScraper(Name, baseURL, Priority, language.Japanese)}
+}
+
+func (fc2ppvdb *FC2PPVDB) SetConfig(config provider.Config) error {
+	if config.Has("xsrf_token") && config.Has("session") {
+		xsrf, err := config.GetString("xsrf_token")
+		if err != nil {
+			return err
+		}
+		session, err := config.GetString("session")
+		if err != nil {
+			return err
+		}
+		return fc2ppvdb.SetCookies(baseURL, []*http.Cookie{
+			{Name: "XSRF-TOKEN", Value: xsrf},
+			{Name: "fc2ppvdb_session", Value: session},
+		})
+	}
+	return nil
 }
 
 func (fc2ppvdb *FC2PPVDB) NormalizeMovieID(id string) string {
@@ -73,60 +117,65 @@ func (fc2ppvdb *FC2PPVDB) GetMovieInfoByURL(rawURL string) (info *model.MovieInf
 	c := fc2ppvdb.ClonedCollector()
 
 	scraper.SetupHTTPErrorHandling(c, &err)
-	scraper.SetupResultValidation(c, &info.Title, &err)
 
-	// Cover/Thumb Image
-	c.OnXML(`//main//div[contains(@class,'container')]/div[1]/div[1]/a/img`, func(e *colly.XMLElement) {
-		info.CoverURL = e.Request.AbsoluteURL(e.Attr("src"))
-	})
-
-	// Cover (fallback: og:image meta tag)
-	c.OnXML(`//meta[@property="og:image"]`, func(e *colly.XMLElement) {
-		if info.CoverURL == "" {
-			info.CoverURL = e.Request.AbsoluteURL(e.Attr("content"))
+	// Parse JSON API response
+	c.OnResponse(func(r *colly.Response) {
+		if err != nil {
+			return
 		}
-	})
 
-	// Cover (fallback: twitter:image meta tag)
-	c.OnXML(`//meta[@name="twitter:image"]`, func(e *colly.XMLElement) {
-		if info.CoverURL == "" {
-			info.CoverURL = e.Request.AbsoluteURL(e.Attr("content"))
+		var resp articleResponse
+		if jsonErr := json.Unmarshal(r.Body, &resp); jsonErr != nil {
+			err = fmt.Errorf("fc2ppvdb: failed to parse JSON: %w", jsonErr)
+			return
 		}
-	})
 
-	// Title
-	c.OnXML(`//main//div[contains(@class,'container')]/div[1]/div[2]/h2/a`, func(e *colly.XMLElement) {
-		info.Title = e.Text
-	})
+		if resp.Article == nil {
+			err = provider.ErrInfoNotFound
+			return
+		}
 
-	// Fields
-	c.OnXML(`//main//div[contains(@class,'container')]/div[1]/div[2]/div`, func(e *colly.XMLElement) {
-		if child := e.DOM.(*html.Node).FirstChild; child != nil {
-			switch child.Data {
-			case "ID：":
-				info.ID = strings.TrimSpace(e.ChildText(`.//span`))
-			case "販売者：":
-				info.Maker = strings.TrimSpace(e.ChildText(`.//span`))
-			case "女優：":
-				parser.ParseTexts(
-					htmlquery.FindOne(e.DOM.(*html.Node), `.//span`),
-					(*[]string)(&info.Actors),
-				)
-			case "モザイク：": // mosaic
-			case "販売日：":
-				info.ReleaseDate = parser.ParseDate(e.ChildText(`.//span`))
-			case "収録時間：":
-				info.Runtime = parser.ParseRuntime(e.ChildText(`.//span`))
-			case "タグ：": // tags & genres
-				parser.ParseTexts(
-					htmlquery.FindOne(e.DOM.(*html.Node), `.//span`),
-					(*[]string)(&info.Genres),
-				)
+		a := resp.Article
+		info.Title = strings.TrimSpace(a.Title)
+		if info.Title == "" {
+			err = provider.ErrInfoNotFound
+			return
+		}
+
+		info.ID = fmt.Sprintf("%d", a.VideoID)
+		info.Number = fmt.Sprintf("FC2-%d", a.VideoID)
+
+		if a.ImageURL != "" {
+			info.CoverURL = a.ImageURL
+		}
+
+		if a.Writer != nil && a.Writer.Name != "" {
+			info.Maker = a.Writer.Name
+		}
+
+		for _, actress := range a.Actresses {
+			if name := strings.TrimSpace(actress.Name); name != "" {
+				info.Actors = append(info.Actors, name)
 			}
 		}
+
+		for _, tag := range a.Tags {
+			if name := strings.TrimSpace(tag.Name); name != "" {
+				info.Genres = append(info.Genres, name)
+			}
+		}
+
+		if a.ReleaseDate != "" {
+			info.ReleaseDate = parser.ParseDate(a.ReleaseDate)
+		}
+
+		if a.Duration != "" {
+			info.Runtime = parser.ParseRuntime(a.Duration)
+		}
 	})
 
-	if vErr := c.Visit(info.Homepage); vErr != nil {
+	apiURL := fmt.Sprintf(articleAPIURL, id)
+	if vErr := c.Visit(apiURL); vErr != nil {
 		err = vErr
 	}
 	return

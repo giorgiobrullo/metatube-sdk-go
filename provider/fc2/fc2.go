@@ -2,6 +2,7 @@ package fc2
 
 import (
 	"fmt"
+	"net/http"
 	"net/url"
 	"path"
 	"regexp"
@@ -18,7 +19,10 @@ import (
 	"github.com/metatube-community/metatube-sdk-go/provider/internal/scraper"
 )
 
-var _ provider.MovieProvider = (*FC2)(nil)
+var (
+	_ provider.MovieProvider = (*FC2)(nil)
+	_ provider.ConfigSetter  = (*FC2)(nil)
+)
 
 const (
 	Name     = "FC2"
@@ -37,6 +41,19 @@ type FC2 struct {
 
 func New() *FC2 {
 	return &FC2{scraper.NewDefaultScraper(Name, baseURL, Priority, language.Japanese)}
+}
+
+func (fc2 *FC2) SetConfig(config provider.Config) error {
+	if config.Has("session_id") {
+		sessionID, err := config.GetString("session_id")
+		if err != nil {
+			return err
+		}
+		return fc2.SetCookies(baseURL, []*http.Cookie{
+			{Name: "CONTENTS_FC2_PHPSESSID", Value: sessionID},
+		})
+	}
+	return nil
 }
 
 func (fc2 *FC2) NormalizeMovieID(id string) string {
