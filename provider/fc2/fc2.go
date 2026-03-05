@@ -57,25 +57,19 @@ func (fc2 *FC2) SetConfig(config provider.Config) error {
 		{Name: "CONTENTS_FC2_PHPSESSID", Value: sessionID},
 	}
 
-	// Cookies on .fc2.com (Cloudflare clearance + FC2 auth)
-	var fc2Cookies []*http.Cookie
+	// Cookies on .fc2.com (Cloudflare clearance + FC2 auth).
+	// These must have Domain set so Go's cookie jar sends them to all *.fc2.com subdomains.
 	for _, key := range []string{"cf_clearance", "fcu", "fcus", "FC2_GDPR", "contents_mode", "contents_func_mode"} {
 		if config.Has(key) {
 			v, _ := config.GetString(key)
 			if v != "" {
-				fc2Cookies = append(fc2Cookies, &http.Cookie{Name: key, Value: v})
+				contentsCookies = append(contentsCookies, &http.Cookie{Name: key, Value: v, Domain: ".fc2.com"})
 			}
 		}
 	}
 
 	if err := fc2.SetCookies(baseURL, contentsCookies); err != nil {
 		return err
-	}
-	if len(fc2Cookies) > 0 {
-		// Set cookies on the parent domain too for Cloudflare + auth
-		if err := fc2.SetCookies("https://fc2.com/", fc2Cookies); err != nil {
-			return err
-		}
 	}
 
 	// Cloudflare validates that the User-Agent matches the cf_clearance cookie.
