@@ -30,8 +30,10 @@ const (
 
 const (
 	baseURL   = "https://www.aventertainments.com/"
-	movieURL  = "https://www.aventertainments.com/%s/2/29/product_lists"
-	searchURL = "https://www.aventertainments.com/ppv/search?keyword=%s&lang=2&v=1&culture=ja-JP"
+	// Upstream #338 moved these to the site's current /dvd/ endpoints; the old
+	// /%s/2/29/product_lists and /ppv/search forms this fork carried are stale.
+	movieURL  = "https://www.aventertainments.com/dvd/detail?pro=%s&lang=2&culture=ja-JP&cat=29"
+	searchURL = "https://www.aventertainments.com/dvd/search?lang=2&cat=29&culture=ja-JP&keyword=%s&searchby=keyword"
 )
 
 type AVE struct {
@@ -60,9 +62,13 @@ func (ave *AVE) ParseMovieIDFromURL(rawURL string) (string, error) {
 		return productID, nil
 	}
 	// legacy url format: /ID/2/29/product_lists
+	// Deliberately looser than upstream's `/\d+/\d+/\d+/product_lists`: this also
+	// matches the bare /ID/2/29 form, so it is a superset of what upstream parses.
 	if ss := regexp.MustCompile(`^/(\d+)/\d+/\d+`).FindStringSubmatch(homepage.Path); len(ss) == 2 {
 		return ss[1], nil
 	}
+	// upstream's trailing `pro` check is dropped here - it is already handled at
+	// the top of this function, so keeping it would be dead code.
 	return "", fmt.Errorf("parse id failed: %s", rawURL)
 }
 
